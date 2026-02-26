@@ -450,6 +450,24 @@ class AUTOINGEST_OT_Import(bpy.types.Operator):
             if cls._index >= cls._total:
                 return self._finish(context)
 
+            # Show progress BEFORE the heavy import so the bar moves immediately.
+            # (index + 1) so the very first file already shows > 0 %.
+            context.scene.autoingest_progress = int(((cls._index + 1) / cls._total) * 100)
+
+            # Force the depsgraph to acknowledge bpy.data changes from the
+            # previous tick before we start the next import and before redraw.
+            context.view_layer.update()
+
+            # Tag only the UI region of every VIEW_3D area across all windows.
+            # The N-Panel lives in region type 'UI' — more precise than tagging
+            # the entire area, and covers multi-window setups.
+            for window in context.window_manager.windows:
+                for area in window.screen.areas:
+                    if area.type == "VIEW_3D":
+                        for region in area.regions:
+                            if region.type == "UI":
+                                region.tag_redraw()
+
             filepath = cls._obj_files[cls._index]
             try:
                 process_single_obj(filepath, cls._settings, cls._created_collections)
@@ -457,11 +475,6 @@ class AUTOINGEST_OT_Import(bpy.types.Operator):
                 cls._errors.append(f"{filepath.name}: {e}")
 
             cls._index += 1
-            context.scene.autoingest_progress = int((cls._index / cls._total) * 100)
-
-            for area in context.screen.areas:
-                if area.type == "VIEW_3D":
-                    area.tag_redraw()
 
         return {"PASS_THROUGH"}
 
